@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+const base='http://localhost:5173';
+const headers={'Content-Type':'application/json',Cookie:'__sites_local_auth=1',Origin:base};
+async function post(body,status=200){const r=await fetch(base+'/api/shop',{method:'POST',headers,body:JSON.stringify(body)});const d=await r.json();assert.equal(r.status,status,JSON.stringify(d));return d}
+async function read(){const r=await fetch(base+'/api/shop',{headers});assert.equal(r.status,200);return r.json()}
+assert.equal((await fetch(base+'/api/shop')).status,401);
+const p=crypto.randomUUID(),w=crypto.randomUUID(),b=crypto.randomUUID();
+await post({kind:'product',id:p,name:'Тест · Роза',category:'Цветы',price:1000,minimum:5});
+await post({kind:'product',id:w,name:'Тест · Упаковка',category:'Упаковка',price:500,minimum:2});
+const receipt={kind:'receipt',id:crypto.randomUUID(),note:'Локальная проверка',lines:[{id:p,quantity:10,cost:400},{id:w,quantity:5,cost:100}]};
+await post(receipt);await post(receipt);
+let d=await read();assert.equal(d.products.find(x=>x.id===p).stock,10);
+await post({kind:'receipt',id:crypto.randomUUID(),note:'Средняя цена',lines:[{id:p,quantity:10,cost:600}]});
+d=await read();assert.equal(d.products.find(x=>x.id===p).cost,50000);
+await post({kind:'recipe',id:b,name:'Тест · Букет',price:5000,lines:[{id:p,quantity:5},{id:w,quantity:1}]});
+const sale={kind:'sale',id:crypto.randomUUID(),note:'Локальная проверка',lines:[{id:b,quantity:2}]};
+await post(sale);await post(sale);
+d=await read();assert.equal(d.products.find(x=>x.id===p).stock,10);assert.equal(d.products.find(x=>x.id===w).stock,3);
+const doc=d.documents.find(x=>x.id===sale.id);assert.equal(doc.amount,1000000);
+const snapshot=JSON.stringify(d);
+await post({kind:'sale',id:crypto.randomUUID(),lines:[{id:w,quantity:1},{id:p,quantity:11}]},409);
+assert.equal(JSON.stringify(await read()),snapshot,'Failure must roll back all document lines');
+await post({kind:'writeoff',id:crypto.randomUUID(),note:'Увядание',lines:[{id:p,quantity:2}]});
+await post({kind:'sale',id:crypto.randomUUID(),lines:[{id:p,quantity:-1}]},400);
+const concurrent=await Promise.all([1,2].map(()=>fetch(base+'/api/shop',{method:'POST',headers,body:JSON.stringify({kind:'sale',id:crypto.randomUUID(),lines:[{id:p,quantity:6}]})}).then(r=>r.status)));
+assert.deepEqual(concurrent.sort(),[200,409]);
+d=await read();assert.equal(d.products.find(x=>x.id===p).stock,2);
+assert.equal(d.report.revenue,1600000);assert.equal(d.report.cost,820000);assert.equal(d.report.loss,100000);
+assert.equal((await fetch(base+'/api/shop',{method:'POST',headers:{...headers,Origin:'https://untrusted.example'},body:JSON.stringify(receipt)})).status,403);
+console.log('PASS: authorization, receipts, weighted cost, recipes, sales, idempotency, atomic rollback, write-offs, invalid input, concurrent stock protection, totals, cross-origin protection');

@@ -1,0 +1,12 @@
+import {sqliteTable,text,integer,check,index,primaryKey} from 'drizzle-orm/sqlite-core';
+import {sql} from 'drizzle-orm';
+export const products=sqliteTable('products',{id:text('id').primaryKey(),name:text('name').notNull(),category:text('category').notNull(),stock:integer('stock').notNull().default(0),cost:integer('cost').notNull().default(0),price:integer('price').notNull(),minimum:integer('minimum').notNull().default(5)},t=>[check('stock_nonnegative',sql`${t.stock} >= 0`)]);
+export const recipes=sqliteTable('recipes',{id:text('id').primaryKey(),name:text('name').notNull(),price:integer('price').notNull()});
+export const parts=sqliteTable('parts',{recipeId:text('recipe_id').notNull().references(()=>recipes.id),productId:text('product_id').notNull().references(()=>products.id),quantity:integer('quantity').notNull()},t=>[primaryKey({columns:[t.recipeId,t.productId]})]);
+export const documents=sqliteTable('documents',{id:text('id').primaryKey(),kind:text('kind').notNull(),created:integer('created').notNull(),actor:text('actor').notNull(),note:text('note').notNull(),summary:text('summary').notNull(),revenue:integer('revenue').notNull().default(0),fingerprint:text('fingerprint').notNull(),reverseOf:text('reverse_of').unique(),expense:integer('expense').notNull().default(0),effectCost:integer('effect_cost'),effectLoss:integer('effect_loss'),effectPurchases:integer('effect_purchases')},t=>[index('idx_documents_created').on(t.created)]);
+export const movements=sqliteTable('movements',{id:integer('id').primaryKey({autoIncrement:true}),documentId:text('document_id').notNull().references(()=>documents.id),productId:text('product_id').notNull().references(()=>products.id),quantity:integer('quantity').notNull(),cost:integer('cost').notNull()},t=>[index('idx_movements_document').on(t.documentId)]);
+export const users=sqliteTable('users',{id:text('id').primaryKey(),username:text('username').notNull().unique(),phone:text('phone').unique(),recoveryHash:text('recovery_hash'),name:text('name').notNull(),passwordHash:text('password_hash').notNull(),role:text('role').notNull(),active:integer('active').notNull().default(1),created:integer('created').notNull()});
+export const sessions=sqliteTable('sessions',{tokenHash:text('token_hash').primaryKey(),userId:text('user_id').notNull().references(()=>users.id),expires:integer('expires').notNull()},t=>[index('idx_sessions_user').on(t.userId)]);
+export const loginLimits=sqliteTable('login_limits',{key:text('key').primaryKey(),attempts:integer('attempts').notNull(),until:integer('until').notNull()});
+
+
